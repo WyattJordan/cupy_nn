@@ -22,51 +22,51 @@ def distribute_model(mini_data_size, dims):
 
     # Future Improvements
     # Make agnostic to number of GPUs
-    
+    num_gpu = 2
+
     # Get available memory
-    with cp.cuda.Device(0):
-        mem0_avail = cp.get_default_memory_pool().get_limit() / 2**20 # in MiB
-    with cp.cuda.Device(1):
-        mem1_avail = cp.get_default_memory_pool().get_limit() / 2**20
-    mem_avail = mem1_avail + mem0_avail
-    print("mem0_avail: {}, mem1_avail: {}, mem_avail: {} MiB"\
-          .format(mem0_avail, mem1_avail, mem_avail))
+    gpu_mem = np.zeros(num_gpu) # in MiB
+    for i in range(num_gpu):
+        with cp.cuda.Device(i):
+            gpu_mem[i] = cp.get_default_memory_pool().get_limit() / 2**20
+            print("Available Memory for GPU "+str(i)+" is {} MiB".format(gpu_mem[i]))  
+    print("total GPU memory available is {} GiB".format(gpu_mem.sum()/1024))
 
-    # Make mems, array of memory required for each layer
-    mems = np.zeros([len(dims)-1,1])  # add amount of space needed for libraries? how much?
-    mems[0][0] = mems[0][0] + mini_data_size # keep mini-batch and first layer on same GPU 
+    # Make mems, array of memory required for each layer (add space for libararies?)
+    mems = np.zeros([len(dims)-1,1])
+    mems[0][0] = mini_data_size # keep mini-batch and first layer on same GPU 
     for i in range(1,len(dims)):
-        mems[i-1] = 4 * (dims[i-1]*dims[i] + dims[i]) # assumes FP32
+        mems[i-1] = 4 * (dims[i-1]*dims[i] + dims[i]) # in bytes, assumes FP32
 
-    # Check Model can fit on the GPUs
+    # Check GPUs have enough memory
     total = np.sum(mems)/2**20
-    print("total is: {:.2f} MiB with {:.2f} MiB remaining".format(total, mem_avail-total))
-    if mem_avail - total < 0:
+    print("total is: {:.2f} GiB with {:.2f} GiB remaining".format(total/1024, (gpu_mem.sum()-total)/1024))
+    if gpu_mem.sum() - total < 0:
         print("Model cannot be fit into allocated GPU memory, exiting")
         sys.exit()
         
-    options = list(list(tup for tup in itertools.product(range(2),repeat=len(mems))))
+    options = list(list(tup for tup in itertools.product(range(num_gpu),repeat=len(mems))))
     options = np.array(options)
-    # results columns: crossovers, mem0 left, mem1 left, mem worst case, corresponding option
-    results = np.zeros([options.shape[0],4])
+    # results columns: crossovers, min GPU memory remaining, [mem used for gpu_i], [options]
+    results = np.zeros([options.shape[0], 2 + num_gpu])
     results = np.append(results, options, axis=1)
     print("Finding best method to distribute model across 2 GPUs")
+    gpu_mem_used = np.zeros(num_gpu)
     for i,op in enumerate(options):
-        mem0 = np.sum(mems[(1-op).astype(bool)])
-        mem1 = np.sum(mems[op.astype(bool)])
+        for k,gpu in enumerate(gpu_mem_used):
+            gpu_mem_used[k] = np.sum(mems[(op==k).astype(bool)])
+            results[i][k+2] = gpu_mem[k] - gpu_mem_used[k]/(2**20)
         results[i][0] = (np.diff(op)!=0).sum() # crossovers (require GPU mem copy)
-        results[i][1] = mem0_avail - (mem0.sum() / (2**20)) # in MiB
-        results[i][2] = mem1_avail - (mem1.sum() / (2**20))
-        results[i][3] = min(results[i][1], results[i][2])
-        if results[i][1]<0 or results[i][2]<0: # if a GPU runs out of mem set crossovers to max
+        results[i][1] = np.amin(results[i][2:2+num_gpu])
+        if results[i][2:2+num_gpu].any()<0: # if a GPU runs out of mem set crossovers to max
             results[i][0] = len(mems)*1.1
             
     # sort by min crossovers, then by smallest GPU memory left (inverted)
     # could add another criteria to minimize: size of data to be crossed over
-    results = results[np.lexsort((-results[:,3],results[:,0]))]
+    results = results[np.lexsort((-results[:,1],results[:,0]))]
     print("chosen configuration is: ")
     print(results[0][:])
-    gpu_idxs = results[0][4:4+len(mems)]
+    gpu_idxs = results[0][2+num_gpu : 2 + num_gpu + len(mems)]
     print(gpu_idxs)
         
 
