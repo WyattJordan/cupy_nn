@@ -1,22 +1,22 @@
-import numpy as np
+import cupy as cp
 
 class sigmoid():
     def fn(self,z):
-        return np.where(z<0, np.exp(z)/(1.+np.exp(z)), 1./(1.+np.exp(-z)))
+        return cp.where(z<0, cp.exp(z)/(1.+cp.exp(z)), 1./(1.+cp.exp(-z)))
     
     def dfn(self,z):
         return self.fn(z)*(1. - self.fn(z))
 
 class relu():
     def fn(self, z):
-        return np.clip(z,0.,None)
+        return cp.clip(z,0.,None)
 
     def dfn(self, z):
-        return np.where(z<0,0.,1.)
+        return cp.where(z<0,0.,1.)
 
 class tanh():
     def fn(self, z):
-        return np.tanh(z)
+        return cp.tanh(z)
 
     def dfn(self, z):
         return 1. - self.fn(z)**2.

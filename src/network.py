@@ -1,5 +1,5 @@
 from layer import layer
-import numpy as np
+import cupy as cp
 import copy
 
 class network:
@@ -17,12 +17,12 @@ class network:
 
     def compute_cost(self, output, Y):
         # C = 1/(2n) * sum for every example( ||y - A[L]|| ^2 )
-        self.cost = 0.5*np.sum(np.linalg.norm(Y-output,axis=0)**2)        
+        self.cost = 0.5*cp.sum(cp.linalg.norm(Y-output,axis=0)**2)        
         return self.cost
                 
     def compute_acc(self, output, Y):
-        self.yhat = (output == np.amax(output, axis=0, keepdims=True))
-        self.num_correct = 1.*np.sum(Y*self.yhat)
+        self.yhat = (output == cp.amax(output, axis=0, keepdims=True))
+        self.num_correct = 1.*cp.sum(Y*self.yhat)
         return 100.*self.num_correct/self.m
     
     def backprop_all(self, output, Y):
