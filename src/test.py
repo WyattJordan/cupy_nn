@@ -1,6 +1,6 @@
 import cupy as cp
 import numpy as np
-import os
+import os, sys
 import dataloader
 
 if __name__=="__main__":
@@ -31,6 +31,15 @@ if __name__=="__main__":
     # and if it doesn't make a[l-1]_copy with device = w[l].device
     # must do the same thing during backprop!!!
 
+    cp.cuda.Device(1).use()
+    with cp.cuda.Device(0):
+        a1 = cp.random.randn(784,5000)
+        w1 = cp.random.randn(30,784)
+        b1 = cp.random.randn(30,1)
+        z1 = cp.dot(w1,a1) + b1
+    print("done dev0 test, z shape is "+str(z1.shape))
+    sys.exit()
+    
     cp.cuda.Device(0).use()
     print("memory limit on dev 0 is: "+str(cp.get_default_memory_pool().get_limit()))
     cp.cuda.Device(1).use()

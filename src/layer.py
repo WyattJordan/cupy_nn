@@ -39,13 +39,30 @@ class layer:
         # print("memory added is {} MiB and total is {} on GPU1"\
               # .format(mems_after[1][0] - mems_before[1][0], mems_after[1][0]))
         
-    def propagate(self, A_prev):
+    def propagate(self, A_prev, jump):
         with cp.cuda.Device(self.gpu):
             #print("self.w shape "+str(self.w.shape)+" A_prev.shape "+str(A_prev.shape))
             mems_before = check_gpu_mem(False)
-            # if crossing over to this gpu:
-            # A_prev = cp.asarray(A_prev, dtype=cp.float32) # unnecessary, cp handles this in backend
-            self.Z = cp.dot(self.w, A_prev)+self.b
+            
+            # self.A_prev = A_prev
+            # if jump:
+            #     print("moving data to correct gpu")
+            #     self.A_prev = cp.asarray(A_prev, dtype=cp.float32)
+            #     print("w type: "+str(self.w.dtype)+" shape "+str(self.w.shape)+" dev "+str(self.w.device))
+            #     print("b type: "+str(self.b.dtype)+" shape "+str(self.b.shape)+" dev "+str(self.b.device))
+            #     print("A_prev type: "+str(self.A_prev.dtype)+" shape "+str(self.A_prev.shape)+" dev "+str(self.A_prev.device))
+            # self.Z = cp.dot(self.w, self.A_prev)
+
+            if jump:
+                print("moving data to correct gpu")
+                A_prev = cp.asarray(A_prev, dtype=cp.float32)
+                print("w type: "+str(self.w.dtype)+" shape "+str(self.w.shape)+" dev "+str(self.w.device))
+                print("b type: "+str(self.b.dtype)+" shape "+str(self.b.shape)+" dev "+str(self.b.device))
+                print("A_prev type: "+str(A_prev.dtype)+" shape "+str(A_prev.shape)+" dev "+str(A_prev.device))
+            self.Z = cp.dot(self.w, A_prev)
+            
+            print("Z size is: "+str(self.Z.shape)+" b shape is: "+str(self.b.shape))
+            self.Z += self.b
             self.A = self.activation.fn(self.Z)
             mems_after = check_gpu_mem(False)
             exp_added = (self.Z.nbytes + self.A.nbytes)/2**20
@@ -60,10 +77,17 @@ class layer:
 
     # next layer already calculated dA for this layer
     # find dA, dw, db for this layer and dA for previous layer
-    def backprop(self, dA, A_prev, m):
+    def backprop(self, dA, A_prev, m, jump_forward, jump_backward):
         with cp.cuda.Device(self.gpu):
-            A_prev = cp.asarray(A_prev, dtype=cp.float32)
-            dA = cp.asarray(dA, dtype=cp.float32)
+            self.dA = dA
+            if jump_forward:
+                A_prev = cp.asarray(A_prev, dtype=cp.float32)
+            if jump_backward:
+                dA = cp.asarray(dA, dtype=cp.float32)
+            print("A_prev shape "+str(A_prev.shape)+" dev "+str(A_prev.device))
+            print("dA shape "+str(dA.shape)+" dev "+str(dA.device))
+            print("self.Z shape "+str(self.Z.shape)+" dev "+str(self.Z.device))
+
             self.dZ = dA * self.activation.dfn(self.Z)
             self.dA_prev = cp.dot(self.w.T, self.dZ)
             self.dw = 1/m*cp.dot(self.dZ, A_prev.T)
