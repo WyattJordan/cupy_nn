@@ -10,12 +10,16 @@ if __name__=="__main__":
     with cp.cuda.Device(1):
         mempool.set_limit(size=1830*1024**2) # Dev 1 has 1830 MiB allocated (~170MiB free)
 
+    # dev = cupy.cuda.Device(gpu_idx)
+    # get current device:  dev = cp.cuda.Device()
+    # dev.id, dev.compute_capability etc
+    # https://docs.cupy.dev/en/stable/reference/generated/cupy.cuda.Device.html
+    
     # switching memory notes:
     # var.get() puts var on CPU
     # cp.asarray(var, dtype=float32) puts var on currently selected device
 
     # using a stream lets it run asynchronously in the background!!
-
 
     # checking memory
     # calculate memory usage from model, then split over 2 gpus and make sure there

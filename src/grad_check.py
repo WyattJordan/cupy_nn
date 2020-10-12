@@ -2,9 +2,12 @@ from network import network
 import numpy as np
 
 class gradcheck():
-    def __init__(self,network):
+    def __init__(self,network, x, y):
         self.net = network
         self.layers = network.layers
+        print("---------- Starting gradient check... ----------")        
+        self.check_gradient(x,y)
+        self.output_results()
 
     def check_equal(self, layers):
         equal = True
