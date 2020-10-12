@@ -8,6 +8,8 @@ class layer:
 
     def __init__(self, dim, dim_prev, gpu, activation="relu",  init=""):
 
+        mems_before = check_gpu_mem(False)
+
         if activation=="sigmoid":
             self.activation = sigmoid()
             factor = 1. / np.sqrt(dim_prev)
@@ -32,18 +34,28 @@ class layer:
         with cp.cuda.Device(self.gpu): 
             self.w = cp.asarray(self.w, dtype=cp.float32)
             self.b = cp.asarray(self.b, dtype=cp.float32)
-        print("size of w is "+str(self.w.nbytes)+" and b is "+str(self.b.nbytes))
+        # print("size of w is "+str(self.w.nbytes/2**20)+" and b is "+str(self.b.nbytes/2**20))
+        mems_after = check_gpu_mem(False)
+        # print("memory added is {} MiB and total is {} on GPU1"\
+              # .format(mems_after[1][0] - mems_before[1][0], mems_after[1][0]))
+        
     def propagate(self, A_prev):
         with cp.cuda.Device(self.gpu):
             #print("self.w shape "+str(self.w.shape)+" A_prev.shape "+str(A_prev.shape))
             mems_before = check_gpu_mem(False)
-            A_prev = cp.asarray(A_prev, dtype=cp.float32)
+            # if crossing over to this gpu:
+            # A_prev = cp.asarray(A_prev, dtype=cp.float32)
             self.Z = cp.dot(self.w, A_prev)+self.b
             self.A = self.activation.fn(self.Z)
             mems_after = check_gpu_mem(False)
+            exp_added = (self.Z.nbytes + self.A.nbytes)/2**20
+            print("size of Z and A is "+str(self.Z.nbytes/2**20)+" for total "+str(exp_added))
+            print("size of A_prev is "+str(A_prev.nbytes/2**20))
+            
             print("memory added is {} MiB and total is {} on GPU1"\
                   .format(mems_after[1][0] - mems_before[1][0], mems_after[1][0]))
             # add dropout here and scale self.A as needed (scaling also required in backprop!)
+            print("error for mem added: "+str(mems_after[1][0] - mems_before[1][0] - exp_added))
             return self.A
 
     # next layer already calculated dA for this layer

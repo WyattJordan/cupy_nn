@@ -11,10 +11,10 @@ class network:
         self.layers = []
         self.gpus = gpus
         for i in range(0,len(dims)-1):
-            print("---------- for making layer "+str(i)+" -------------")            
+            # print("---------- for making layer "+str(i)+" -------------")            
             self.layers.append(layer(dims[i+1],dims[i], gpus[i], activations[i]))
-            check_gpu_mem()
-        print("####################################################")
+            # check_gpu_mem()
+        # print("####################################################")
         
     def propagate_all(self, X):
         self.A = [X]
