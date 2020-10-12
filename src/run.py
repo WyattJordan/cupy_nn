@@ -14,8 +14,9 @@ def main():
     np.set_printoptions(threshold=np.inf)
 
     # Dev 0 will allocate 1600 MiB (leaving ~60MiB free)
-    # Dev 1 will allocate 1930 MiB (leaving ~70MiB free)    
-    mems_alloc = np.array([1600, 1930]) - 120 #70 # ~70MiB needed for cupy on every GPU!
+    # Dev 1 will allocate 1930 MiB (leaving ~70MiB free)
+
+    mems_alloc = np.array([1500, 1930])    
     set_GPU_mems(mems_alloc)
 
     print("memory before loading data:")
@@ -48,13 +49,14 @@ def main():
     dims = [train_x.shape[0], 17600, 2000, 10]  # total under by 11MiB  w/ 51%    
     dims = [train_x.shape[0], 13600, 4000, 10]  # total under by 7MiB + 4MiB, 50% usage
     dims = [train_x.shape[0], 13600, 12000, 10] # total under by 29MiB w/ 86% usage
-    dims = [train_x.shape[0], 13600, 13000, 10] # total under by 31MiB w/ 91% usage
+    dims = [train_x.shape[0], 13600, 15000, 10] # total under by 31MiB w/ 91% usage
 
+    dims = [train_x.shape[0], 030, 300, 10]  # default mem test, 0.26 GB
     
     # dims = [train_x.shape[0], 156800, 1568, 9800, 16000] # gets split between 2 GPU
     activations = ["relu","relu","sigmoid"]
     gpus = distribute_model(dims, batch_size, x_example_size, y_example_size)
-
+    gpus = np.zeros_like(gpus)
     net = network(dims, activations, gpus, batch_size)
     
     epochs = 50

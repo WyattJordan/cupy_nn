@@ -44,7 +44,7 @@ class layer:
             #print("self.w shape "+str(self.w.shape)+" A_prev.shape "+str(A_prev.shape))
             mems_before = check_gpu_mem(False)
             # if crossing over to this gpu:
-            # A_prev = cp.asarray(A_prev, dtype=cp.float32)
+            # A_prev = cp.asarray(A_prev, dtype=cp.float32) # unnecessary, cp handles this in backend
             self.Z = cp.dot(self.w, A_prev)+self.b
             self.A = self.activation.fn(self.Z)
             mems_after = check_gpu_mem(False)

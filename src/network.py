@@ -11,7 +11,7 @@ class network:
         self.layers = []
         self.gpus = gpus
         for i in range(0,len(dims)-1):
-            # print("---------- for making layer "+str(i)+" -------------")            
+            print("---------- making layer "+str(i)+" on gpu "+str(gpus[i])+" -------------")
             self.layers.append(layer(dims[i+1],dims[i], gpus[i], activations[i]))
             # check_gpu_mem()
         # print("####################################################")

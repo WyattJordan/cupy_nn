@@ -7,7 +7,7 @@ def set_GPU_mems(mems):
     mempool = cp.get_default_memory_pool()
     for i,mem in enumerate(mems):
         with cp.cuda.Device(i):
-            mempool.set_limit(size=mem*1024**2)
+            mempool.set_limit(size=mem*1024**2) # convert MiB to bytes
     
 def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
     # x_size is bytes for one example
@@ -30,9 +30,13 @@ def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
     for i in range(num_gpu):
         with cp.cuda.Device(i):
             gpu_mem[i] = cp.get_default_memory_pool().get_limit() / 2**20
-            print("Allocated Memory for GPU "+str(i)+" is {} MiB".format(gpu_mem[i]))  
-    print("total allocated GPU Memory is {:.3f} GiB".format(gpu_mem.sum()/1024))
+            print("Allocated Memory for GPU "+str(i)+" is {} MiB".format(gpu_mem[i]))
+    # need 34MiB for libraries, 30MiB for operations, 40MiB for metadata w/ largest models
 
+    print("total allocated GPU Memory is {:.3f} GiB".format(gpu_mem.sum()/1024))
+    gpu_mem = gpu_mem - 34 - 30 - 40
+    print("allocated GPU Memory w/ margin is {:.3f} GiB".format(gpu_mem.sum()/1024))
+    
     # each column is one layer
     # rows are memory required (in MiB) for:
     # 0 - weights (self.w)
@@ -67,7 +71,7 @@ def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
     # Each row is a unique combination of assigning each layer to a gpu
     options = list(list(tup for tup in itertools.product(range(num_gpu),repeat=len(dims)-1)))
     options = np.array(options)
-    # results columns: crossovers, min GPU memory remaining, [mem used for gpu_i], [options]
+    # results columns: num crossovers, min GPU memory remaining, [mem used for gpu_i], [options]
     results = np.zeros([options.shape[0], 2 + num_gpu]) # row for every option
     results = np.append(results, options, axis=1)       # append options for lexsort
     print("Finding best distribution across {} GPUs: ".format(num_gpu), end='')
@@ -82,9 +86,9 @@ def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
             
         results[i][0] = (np.diff(op)!=0).sum() # num crossovers (require GPU mem copy)
         results[i][1] = np.amin(results[i][2:2+num_gpu])
-        if results[i][2:2+num_gpu].any()<0: # if a GPU runs out of mem set crossovers to max+1
+        if results[i][1] < 0: # if a GPU runs out of mem set crossovers to max+1
             results[i][0] = len(dims)
-            
+    print(results)
     # sort by min crossovers, then by largest of minimum GPU memory left
     # could add another criteria to minimize: size of data to be crossed over
     results = results[np.lexsort((-results[:,1],results[:,0]))]
