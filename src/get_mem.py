@@ -3,6 +3,8 @@ import subprocess
 
 
 def check_gpu_mem(output=True):
+    # Returns (num gpu, 3) np array
+    # columns: used memory, total memory on gpu, % used
     info = str(subprocess.Popen("nvidia-smi", stdout=subprocess.PIPE).communicate()[0])
     gpu_fan_idxs = [i for i, ch in enumerate(info) if '%'==ch]
     gpu_mems = np.zeros([len(gpu_fan_idxs), 3])

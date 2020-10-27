@@ -30,9 +30,9 @@ def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
     for i in range(num_gpu):
         with cp.cuda.Device(i):
             gpu_mem[i] = cp.get_default_memory_pool().get_limit() / 2**20
-            print("Allocated Memory for GPU "+str(i)+" is {} MiB".format(gpu_mem[i]))
+            # print("Allocated Memory for GPU "+str(i)+" is {} MiB".format(gpu_mem[i]))
+            
     # need 34MiB for libraries, 30MiB for operations, 40MiB for metadata w/ largest models
-
     print("total allocated GPU Memory is {:.3f} GiB".format(gpu_mem.sum()/1024))
     gpu_mem = gpu_mem - 34 - 30 - 40
     print("allocated GPU Memory w/ margin is {:.3f} GiB".format(gpu_mem.sum()/1024))
@@ -42,24 +42,26 @@ def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
     # 0 - weights (self.w)
     # 1 - bias    (self.b)
     # 2 - linear units (self.Z) activations (self.A) and derivatives (self.dZ and self.dA)
-    #     note - dependent on batch size, all have equal size
+    #     note - dependent on batch size but all have equal size
     # 3 - data (for input and output layer)
     # 4 - sum for this layer (assuming no jumps)
     # 5 - previous activations (self.A_prev) only occurs on forward jump
-    # 6 - previous derivative during backprop (self.dA_prev) only occurs on backward jump
+    # 6 - previous deriv and weights during backprop (self.w, self.dZ)  only occurs on backward jump
     layer_mems = np.zeros([7,len(dims)-1])
     layer_mems[3][0]  = x_size*batch_size / 2**20 # keep batch inputs and first layer on same GPU
     layer_mems[3][-1] = y_size*batch_size / 2**20 # keep batch labels and last layer on same GPU    
-    
+
+    layer = 0
     for i in range(1,len(dims)):
-        layer_mems[0][i-1] = 4 * dims[i] * dims[i-1]  / 2**20 # in MiB, assumes FP32
-        layer_mems[1][i-1] = 4 * dims[i] / 2**20
-        layer_mems[2][i-1] = layer_mems[1][i-1] * batch_size * 4
-        layer_mems[4][i-1] = np.sum(layer_mems[:5,i-1])
-        layer_mems[5][i-1] = 4 * dims[i-1] * batch_size / 2**20
+        layer_mems[0][layer] = 4 * dims[i] * dims[i-1]  / 2**20 # in MiB, assumes FP32
+        layer_mems[1][layer] = 4 * dims[i] / 2**20
+        layer_mems[2][layer] = layer_mems[1][layer] * batch_size * 4
+        layer_mems[4][layer] = np.sum(layer_mems[:5,i-1])
+        layer_mems[5][layer] = 4 * dims[i-1] * batch_size / 2**20
         if i!=len(dims)-1:
-            layer_mems[6][i-1] = 4 * dims[i+1] * batch_size / 2**20 
-        
+            layer_mems[6][layer] = layer_mems[2][layer+1] / 4 + layer_mems[0][layer+1]
+        layer += 1
+    
     # Check GPUs have enough memory
     total = np.sum(layer_mems[4,:])
     print("total is: {:.4f} GiB with {:.4f} GiB remaining"\
@@ -96,4 +98,4 @@ def distribute_model(dims, batch_size, x_size, y_size, num_gpu=2):
     results = results[np.lexsort((-results[:,1],results[:,0]))]
     gpu_idxs = results[0][2+num_gpu : 2 + num_gpu + len(dims)-1]    
     print("Layers will be on GPUs "+str(gpu_idxs)+" respectively.")
-    return gpu_idxs
+    return gpu_idxs.astype(np.int32)

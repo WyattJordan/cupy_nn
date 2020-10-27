@@ -6,10 +6,10 @@ from get_mem import check_gpu_mem
 
 class layer:
 
-    def __init__(self, dim, dim_prev, gpu, activation="relu",  init=""):
-
+    def __init__(self, layer_num, dim, dim_prev, gpu, activation="relu",  init=""):
+        self.mempool = cp.get_default_memory_pool()
         mems_before = check_gpu_mem(False)
-
+        self.lay_num = layer_num
         if activation=="sigmoid":
             self.activation = sigmoid()
             factor = 1. / np.sqrt(dim_prev)
@@ -26,7 +26,6 @@ class layer:
             factor = float(init_factor)
 
 
-        print("initializing layer with dim {} and dim_prev {}".format(dim, dim_prev))
         np.random.seed(1)   # consistent randomization = debuggable network
         self.w = np.random.randn(dim, dim_prev)*factor
         self.b = np.zeros([dim, 1])
@@ -34,72 +33,102 @@ class layer:
         with cp.cuda.Device(self.gpu): 
             self.w = cp.asarray(self.w, dtype=cp.float32)
             self.b = cp.asarray(self.b, dtype=cp.float32)
-        # print("size of w is "+str(self.w.nbytes/2**20)+" and b is "+str(self.b.nbytes/2**20))
         mems_after = check_gpu_mem(False)
-        # print("memory added is {} MiB and total is {} on GPU1"\
-              # .format(mems_after[1][0] - mems_before[1][0], mems_after[1][0]))
+        mem_added = mems_after[gpu][0] - mems_before[gpu][0]
+        total = self.w.nbytes/2**20 + self.b.nbytes/2**20
+        print("dim {} dim_prev {} w: {:.3f} b: {:.3f} total {:.3f} mem added: {:.1f} error: {:.3f}"\
+              .format(dim, dim_prev, self.w.nbytes/2**20, self.b.nbytes/2**20,\
+               total, mem_added, mem_added-total))
         
     def propagate(self, A_prev, jump):
         with cp.cuda.Device(self.gpu):
-            #print("self.w shape "+str(self.w.shape)+" A_prev.shape "+str(A_prev.shape))
+            print("self.w shape "+str(self.w.shape)+" A_prev.shape "+str(A_prev.shape))
             mems_before = check_gpu_mem(False)
             
-            # self.A_prev = A_prev
-            # if jump:
-            #     print("moving data to correct gpu")
-            #     self.A_prev = cp.asarray(A_prev, dtype=cp.float32)
-            #     print("w type: "+str(self.w.dtype)+" shape "+str(self.w.shape)+" dev "+str(self.w.device))
-            #     print("b type: "+str(self.b.dtype)+" shape "+str(self.b.shape)+" dev "+str(self.b.device))
-            #     print("A_prev type: "+str(self.A_prev.dtype)+" shape "+str(self.A_prev.shape)+" dev "+str(self.A_prev.device))
-            # self.Z = cp.dot(self.w, self.A_prev)
-
             if jump:
                 print("moving data to correct gpu")
                 A_prev = cp.asarray(A_prev, dtype=cp.float32)
                 print("w type: "+str(self.w.dtype)+" shape "+str(self.w.shape)+" dev "+str(self.w.device))
                 print("b type: "+str(self.b.dtype)+" shape "+str(self.b.shape)+" dev "+str(self.b.device))
                 print("A_prev type: "+str(A_prev.dtype)+" shape "+str(A_prev.shape)+" dev "+str(A_prev.device))
-            self.Z = cp.dot(self.w, A_prev)
+            # free the memory from the previous Z and A to be replaced by their new values
+            self.Z = self.A = None 
+            # self.mempool.free_all_blocks()
             
-            print("Z size is: "+str(self.Z.shape)+" b shape is: "+str(self.b.shape))
-            self.Z += self.b
+            self.Z = cp.dot(self.w, A_prev) + self.b
+            
+            # print("Z shape is: "+str(self.Z.shape)+" b shape is: "+str(self.b.shape))
+            # self.Z += self.b
             self.A = self.activation.fn(self.Z)
             mems_after = check_gpu_mem(False)
             exp_added = (self.Z.nbytes + self.A.nbytes)/2**20
-            print("size of Z and A is "+str(self.Z.nbytes/2**20)+" for total "+str(exp_added))
-            print("size of A_prev is "+str(A_prev.nbytes/2**20))
-            
-            print("memory added is {} MiB and total is {} on GPU1"\
-                  .format(mems_after[1][0] - mems_before[1][0], mems_after[1][0]))
+            if jump:
+                exp_added += A_prev.nbytes/2**20
+            print("size of Z and A is {:.3f} {:.3f} for total: {:.3f} size of a_prev is {:.3f}"\
+                  .format(self.Z.nbytes/2**20, self.A.nbytes/2**20, exp_added, A_prev.nbytes/2**20))
+            print("memory added is {:.1f} MiB and total is {:.1f} MiB on GPU{}"\
+                  .format(mems_after[self.gpu][0] - mems_before[self.gpu][0],\
+                          mems_after[self.gpu][0], self.gpu))
             # add dropout here and scale self.A as needed (scaling also required in backprop!)
-            print("error for mem added: "+str(mems_after[1][0] - mems_before[1][0] - exp_added))
+            print("error for mem added: {:.1f}".format(mems_after[self.gpu][0] - mems_before[self.gpu][0] - exp_added))
             return self.A
 
     # next layer already calculated dA for this layer
     # find dA, dw, db for this layer and dA for previous layer
-    def backprop(self, dA, A_prev, m, jump_forward, jump_backward):
+    def backprop(self, dZ_after, w_after, A_before, m, jump_forward, jump_backward):
         with cp.cuda.Device(self.gpu):
-            self.dA = dA
-            if jump_forward:
-                A_prev = cp.asarray(A_prev, dtype=cp.float32)
-            if jump_backward:
-                dA = cp.asarray(dA, dtype=cp.float32)
-            print("A_prev shape "+str(A_prev.shape)+" dev "+str(A_prev.device))
-            print("dA shape "+str(dA.shape)+" dev "+str(dA.device))
-            print("self.Z shape "+str(self.Z.shape)+" dev "+str(self.Z.device))
+            # mark variables as free memory before re-assigning (doesn't double memory usage)
+            self.dZ = self.dw = self.db = None
+            
+            if w_after.size == 0 : # last layer in the network, dZ given based on error
+                self.dZ = dZ_after
+                self.dw = 1/m*cp.dot(self.dZ, A_before.T)
+                self.db = 1/m*cp.sum(self.dZ, axis=1, keepdims=True)
+                return self.dZ
 
-            self.dZ = dA * self.activation.dfn(self.Z)
-            self.dA_prev = cp.dot(self.w.T, self.dZ)
-            self.dw = 1/m*cp.dot(self.dZ, A_prev.T)
+            before = check_gpu_mem()
+            
+            if jump_forward: # layer before this one is on a different GPU
+                A_before_this_gpu = cp.copy(A_before)
+                print("JUMPING FORWARD - A_before shape {} dev {} mem {:.3f}".format(A_before.shape, A_before.device, A_before.nbytes/2**20))
+            else:
+                A_before_this_gpu = A_before
+                
+            if jump_backward: # layer after this one is on a different GPU
+                dZ_after = cp.asarray(dZ_after, dtype=cp.float32)
+                w_after = cp.asarray(w_after, dtype=cp.float32)                
+                print("JUMPING BACKWARD - dA shape {} dev {} mem {:.3f}".format(dA.shape, dA.device, dA.nbytes/2**20))
+
+            after = check_gpu_mem()                
+            # self.mempool.free_all_blocks()
+            # self.dZ = dA * self.activation.dfn(self.Z)
+            print("self.Z shape {}  mem {:.3f} dev {}".format(self.Z.shape,self.Z.nbytes/2**20,self.Z.device))
+
+            self.dZ = cp.dot(w_after.T, dZ_after) * self.activation.dfn(self.Z)
+            after2 = check_gpu_mem()
+            A_before_this_gpu = A_before_this_gpu.T
+            print('did transpose')
+            print("devs are: self.Z {} self.dZ {}\nA_before_this_gpu {}\n dZ_after {} w_after{}".format(self.Z.device, self.dZ.device, A_before_this_gpu.device, dZ_after.device, w_after.device))            
+            self.dw = 1/m*cp.dot(self.dZ, A_before_this_gpu)
             self.db = 1/m*cp.sum(self.dZ, axis=1, keepdims=True)
-        return self.dA_prev
+            
+            # # print("w flags")
+            # # print(self.w.flags)
+            # self.w = cp.ascontiguousarray(self.w.T)
+            # print("w flags")
+            # print(self.w.flags)
+
+            # # self.dZ = cp.asfortranarray(self.dZ)            
+            # print("dZ flags")
+            # print(self.dZ.flags)
+        return self.dZ
         
     # assumes L2 regularization or no regularization
     def update(self, alpha=0.001, m=1., lambd=0.):
         with cp.cuda.Device(self.gpu):
             self.w = self.w - (alpha * self.dw) #(self.dw + lambd/m*self.w))
-            self.b = self.b - (alpha * self.db)
-
+            self.b = self.b - (alpha * self.db)                
+        
     # Equality Check for layers when net.check_gradient exits
     def __eq__(self,other):
         if not isinstance(other, layer):

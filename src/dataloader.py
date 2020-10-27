@@ -32,6 +32,8 @@ def format_dataset(data):
     data_y = np.zeros([10,len(data[1])])
     for i,y in enumerate(data[1]):
         data_y[y][i] = 1.0
+    data_x = data_x[:,0:5000] # dataset was too large to fit on GPU memory for testing BGD
+    data_y = data_y[:,0:5000] # slicing is a temp. fix (will add mini batches for SGD soon)
     return data_x, data_y
 
 def load_data_gpu(setname, gpu_start=1, gpu_end=1):
