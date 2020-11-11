@@ -25,7 +25,6 @@ class layer:
         elif init.replace(".","",1).isnumeric():
             factor = float(init_factor)
 
-
         np.random.seed(1)   # consistent randomization = debuggable network
         self.w = np.random.randn(dim, dim_prev)*factor
         self.b = np.zeros([dim, 1])
@@ -105,7 +104,7 @@ class layer:
 
             self.dZ = cp.dot(w_after.T, dZ_after) * self.activation.dfn(self.Z)
             after2 = check_gpu_mem()
-            A_before_this_gpu = A_before_this_gpu.T
+            A_before_this_gpu = cp.transpose(A_before_this_gpu)
             print('did transpose')
             print("devs are: self.Z {} self.dZ {}\nA_before_this_gpu {} A_before {}\n dZ_after {} w_after{}".format(self.Z.device, self.dZ.device, A_before_this_gpu.device, A_before.device, dZ_after.device, w_after.device))            
             self.dw = 1/m*cp.dot(self.dZ, A_before_this_gpu)
