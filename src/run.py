@@ -42,7 +42,6 @@ def main():
     dims = [in_sz, 13600, 15000, out_sz] # total under by 31MiB w/ 91% usage
 
     dims = [in_sz, 30600, 1800, out_sz] # error of     total under by    
-    dims = [in_sz, 3600, 300, out_sz]  # default mem test, 0.26 GB
 
     activations = ["relu","relu","sigmoid"]
     

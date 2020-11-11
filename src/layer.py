@@ -47,7 +47,7 @@ class layer:
             
             if jump:
                 print("moving data to correct gpu")
-                A_prev = cp.asarray(A_prev, dtype=cp.float32)
+                A_prev = cp.copy(A_prev)#, dtype=cp.float32)
                 print("w type: "+str(self.w.dtype)+" shape "+str(self.w.shape)+" dev "+str(self.w.device))
                 print("b type: "+str(self.b.dtype)+" shape "+str(self.b.shape)+" dev "+str(self.b.device))
                 print("A_prev type: "+str(A_prev.dtype)+" shape "+str(A_prev.shape)+" dev "+str(A_prev.device))
@@ -71,28 +71,27 @@ class layer:
                           mems_after[self.gpu][0], self.gpu))
             # add dropout here and scale self.A as needed (scaling also required in backprop!)
             print("error for mem added: {:.1f}".format(mems_after[self.gpu][0] - mems_before[self.gpu][0] - exp_added))
+            if jump:
+                A_prev = None
             return self.A
 
-    # next layer already calculated dA for this layer
-    # find dA, dw, db for this layer and dA for previous layer
     def backprop(self, dZ_after, w_after, A_before, m, jump_forward, jump_backward):
         with cp.cuda.Device(self.gpu):
             # mark variables as free memory before re-assigning (doesn't double memory usage)
             self.dZ = self.dw = self.db = None
+
+            before = check_gpu_mem()            
+            if jump_forward: # layer before this one is on a different GPU
+                A_before_this_gpu = cp.copy(A_before)
+                print("JUMPING FORWARD - A_before shape {} dev {} mem {:.3f} and after shape {} dev {} mem {:.3f}".format(A_before.shape, A_before.device, A_before.nbytes/2**20, A_before_this_gpu.shape, A_before_this_gpu.device, A_before_this_gpu.nbytes/2**20))
+            else:
+                A_before_this_gpu = A_before
             
             if w_after.size == 0 : # last layer in the network, dZ given based on error
                 self.dZ = dZ_after
-                self.dw = 1/m*cp.dot(self.dZ, A_before.T)
+                self.dw = 1/m*cp.dot(self.dZ, A_before_this_gpu.T)
                 self.db = 1/m*cp.sum(self.dZ, axis=1, keepdims=True)
                 return self.dZ
-
-            before = check_gpu_mem()
-            
-            if jump_forward: # layer before this one is on a different GPU
-                A_before_this_gpu = cp.copy(A_before)
-                print("JUMPING FORWARD - A_before shape {} dev {} mem {:.3f}".format(A_before.shape, A_before.device, A_before.nbytes/2**20))
-            else:
-                A_before_this_gpu = A_before
                 
             if jump_backward: # layer after this one is on a different GPU
                 dZ_after = cp.asarray(dZ_after, dtype=cp.float32)
@@ -108,7 +107,7 @@ class layer:
             after2 = check_gpu_mem()
             A_before_this_gpu = A_before_this_gpu.T
             print('did transpose')
-            print("devs are: self.Z {} self.dZ {}\nA_before_this_gpu {}\n dZ_after {} w_after{}".format(self.Z.device, self.dZ.device, A_before_this_gpu.device, dZ_after.device, w_after.device))            
+            print("devs are: self.Z {} self.dZ {}\nA_before_this_gpu {} A_before {}\n dZ_after {} w_after{}".format(self.Z.device, self.dZ.device, A_before_this_gpu.device, A_before.device, dZ_after.device, w_after.device))            
             self.dw = 1/m*cp.dot(self.dZ, A_before_this_gpu)
             self.db = 1/m*cp.sum(self.dZ, axis=1, keepdims=True)
             

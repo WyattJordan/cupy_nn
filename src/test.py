@@ -2,13 +2,14 @@ import cupy as cp
 import numpy as np
 import os, sys
 import dataloader
+from get_mem import check_gpu_mem
 
 if __name__=="__main__":
-    mempool = cp.get_default_memory_pool()    
-    with cp.cuda.Device(0):
-        mempool.set_limit(size=1500*1024**2) # Dev 0 has 1500 MiB allocated (~160MiB free)
-    with cp.cuda.Device(1):
-        mempool.set_limit(size=1830*1024**2) # Dev 1 has 1830 MiB allocated (~170MiB free)
+    # mempool = cp.get_default_memory_pool()    
+    # with cp.cuda.Device(0):
+    #     mempool.set_limit(size=1500*1024**2) # Dev 0 has 1500 MiB allocated (~160MiB free)
+    # with cp.cuda.Device(1):
+    #     mempool.set_limit(size=1830*1024**2) # Dev 1 has 1830 MiB allocated (~170MiB free)
 
     # dev = cupy.cuda.Device(gpu_idx)
     # get current device:  dev = cp.cuda.Device()
@@ -32,11 +33,31 @@ if __name__=="__main__":
     # must do the same thing during backprop!!!
 
     cp.cuda.Device(1).use()
+    mempool = cp.get_default_memory_pool()
+    check_gpu_mem()
     with cp.cuda.Device(0):
-        a1 = cp.random.randn(784,5000)
-        w1 = cp.random.randn(30,784)
-        b1 = cp.random.randn(30,1)
-        z1 = cp.dot(w1,a1) + b1
+        print("setting limit on dev 0 and making a")
+        mempool.set_limit(size=(784*5000 + 784*30 + 30 + 30*5000)*4 + (110 * 2**20))        
+        a = cp.random.randn(5000, 784, dtype=cp.float32)
+        w = cp.random.randn(30,784, dtype=cp.float32)
+        b = cp.random.randn(30,1, dtype=cp.float32)
+        z = cp.random.randn(30, 5000, dtype=cp.float32) # pre-allocate
+        check_gpu_mem()
+        print("computing dot product...")
+        z = cp.dot(w, a.T) + b
+        check_gpu_mem()
+
+    with cp.cuda.Device(1):
+        print("setting limit on 1 and making vars...")
+        mempool.set_limit(size=(784*5000 + 784*30 + 30 + 30*5000)*4 + (110 * 2**20))
+        a1 = cp.copy(a) #cp.random.randn(784,5000)
+        w1 = cp.random.randn(30,784, dtype=cp.float32)
+        b1 = cp.random.randn(30,1, dtype=cp.float32)
+        z1 = cp.random.randn(30, 5000, dtype=cp.float32) # pre-allocate
+        check_gpu_mem()
+        print("computing dot product...")
+        z1 = cp.dot(w1, a1.T) + b1
+        check_gpu_mem()
     print("done dev0 test, z shape is "+str(z1.shape))
     sys.exit()
     
