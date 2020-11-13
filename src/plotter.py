@@ -35,6 +35,6 @@ class plotter():
                 net_str += "-->"
         title = str(len(self.accs))+" epochs w/ rate "+str(self.rate)+" for net "+net_str+" " + desc
         plt.title("\n".join(wrap(title,80)))
-        acc = np.array(self.accs[-1].get())
-        plt.savefig("../img/"+net_str+"_e:"+str(len(self.accs))+"_a:"+str(self.rate)+"_acc:"+format(acc,'.1f')+"%.png", orientation='landscape', bbox_inches='tight')
+        acc = np.array(self.accs[-1])
+        plt.savefig("../img/"+net_str+"_e:"+str(len(self.accs))+"_a:"+str(self.rate)+"_acc:"+format(acc,'.3f')+"%"+desc+".png", orientation='landscape', bbox_inches='tight')
         plt.show()
