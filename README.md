@@ -7,9 +7,9 @@ A neural network implementation with all the linear algebra to understand the bl
 
 ### Stochastic Gradient Descent
 Note: This is 7840 mini-batches, not epochs (40 epochs were executed)
-![Image of Cost Function](/img/L1_7600-->L2_2000-->L3_10_e:7840_a:0.04_acc:100.0%training_performance_with_SGD_98.10%valid.png)
+![Image of Cost Function](/img/L7600_2000_10_SGD.png)
 ### Validation Accuracy
-![Image of Cost Function](/img/L1_7600-->L2_2000-->L3_10_e:40_a:0.04_acc:98.1%validation_performance.png)
+![Image of Cost Function](/img/L7600_2000_10_valid_max_981.png)
 
 
 ## Currently Implements
