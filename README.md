@@ -1,7 +1,7 @@
 # Bare-bones GPU Neural Network (from scratch)
 
 ## Purpose
-A neural network implementation with all the linear algebra to understand the black box. Run on GPU thanks to [Cupy](https://github.com/cupy/cupy)
+A neural network implementation with all the linear algebra to understand the black box. Runs on GPU thanks to [Cupy](https://github.com/cupy/cupy)
 
 ## Fancy Graphics
 
