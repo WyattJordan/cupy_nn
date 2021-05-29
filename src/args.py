@@ -76,7 +76,8 @@ class parser:
             if args.funcs:
                 args.funcs = [f for f in args.funcs.split(",")] + ["sigmoid"]
             else:
-                args.funcs = ["relu"] * len(args.layers) + ["sigmoid"]
+                args.funcs = ["relu"] * (len(args.layers)-2) + ["sigmoid"]
+                # args.funcs = ["relu"] * (len(args.layers)) + ["sigmoid"]                
 
             if args.types:
                 args.types = [datadict[t] for t in args.types] + [cp.float32]
